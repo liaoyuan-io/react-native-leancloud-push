@@ -4,22 +4,17 @@ import android.util.Log;
 
 import com.avos.avoscloud.AVException;
 import com.avos.avoscloud.AVInstallation;
-import com.avos.avoscloud.AVOSCloud;
+import com.avos.avoscloud.PushService;
 import com.avos.avoscloud.SaveCallback;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
-import com.facebook.react.bridge.ReadableArray;
-import com.facebook.react.bridge.ReadableMap;
-import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.modules.core.DeviceEventManagerModule.RCTDeviceEventEmitter;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -28,14 +23,21 @@ import java.util.Map;
 public class LeanCloudPush extends ReactContextBaseJavaModule {
 
     private static LeanCloudPush singleton;
+    private static String ON_RECEIVE_EVENT_NAME = "io.liaoyuan.reactnative.leancloudpush.onReceive";
+    private static String ON_ERROR_EVENT_NAME = "io.liaoyuan.reactnative.leancloudpush.onError";
 
     public LeanCloudPush(ReactApplicationContext reactContext) {
         super(reactContext);
         singleton = this;
+        PushService.setDefaultPushCallback(getReactApplicationContext(), LeanCloudPushClickHandlerActivity.class);
     }
 
     protected static void onError(Exception e) {
-
+        if (singleton != null) {
+            WritableMap error = Arguments.createMap();
+            error.putString("message", e.getLocalizedMessage());
+            singleton.getReactApplicationContext().getJSModule(RCTDeviceEventEmitter.class).emit(ON_ERROR_EVENT_NAME, error);
+        }
     }
 
     protected static void onReceive(String action, String channel, String data) {
@@ -44,7 +46,8 @@ public class LeanCloudPush extends ReactContextBaseJavaModule {
             pushNotification.putString("action", action);
             pushNotification.putString("channel", channel);
             pushNotification.putString("data", data);
-            singleton.getReactApplicationContext().getJSModule(RCTDeviceEventEmitter.class).emit("io.liaoyuan.push.LeanCloud.onReceive", pushNotification);
+            Log.d("LeanCloudPush", "Sending to DeviceEventEmitter");
+            singleton.getReactApplicationContext().getJSModule(RCTDeviceEventEmitter.class).emit(ON_RECEIVE_EVENT_NAME, pushNotification);
         }
     }
 
@@ -54,12 +57,8 @@ public class LeanCloudPush extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
-    public void initialize(ReadableMap options, final Promise promise) {
+    public void getInstallationId(final Promise promise) {
         try {
-            String appId = options.getString("appId");
-            String clientKey = options.getString("clientKey");
-            AVOSCloud.initialize(getCurrentActivity(), appId, clientKey);
-            AVOSCloud.useAVCloudUS();
             AVInstallation.getCurrentInstallation().saveInBackground(new SaveCallback() {
                 @Override
                 public void done(AVException e) {
@@ -76,14 +75,11 @@ public class LeanCloudPush extends ReactContextBaseJavaModule {
         }
     }
 
-    @ReactMethod
-    public void getInstallationId(final Promise promise) {
-        try {
-            String installationId = AVInstallation.getCurrentInstallation().getInstallationId();
-            promise.resolve(installationId);
-        } catch (Exception e) {
-            promise.reject(e);
-        }
+    @Override
+    public Map<String, Object> getConstants() {
+        final Map<String, Object> constants = new HashMap<>();
+        constants.put("ON_RECEIVE", ON_RECEIVE_EVENT_NAME);
+        constants.put("ON_ERROR", ON_ERROR_EVENT_NAME);
+        return constants;
     }
-
 }

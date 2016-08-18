@@ -7,7 +7,7 @@ import _ from 'lodash';
 
 const LeanCloudPushNative = NativeModules.LeanCloudPush;
 
-export const observable = new Rx.BehaviorSubject();
+export const observable = new Rx.Subject();
 
 export const getInstallationId = function () {
     return LeanCloudPushNative.getInstallationId();

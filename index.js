@@ -1,26 +1,27 @@
 /**
  * Created by Tong on 2016/8/16.
  */
-import { NativeModules, DeviceEventEmitter } from "react-native";
+import {NativeModules, DeviceEventEmitter} from 'react-native';
+import Rx from 'rx';
+import _ from 'lodash';
 
 const LeanCloudPushNative = NativeModules.LeanCloudPush;
 
-console.log(LeanCloudPushNative);
+export const observable = new Rx.BehaviorSubject();
 
-const module = {
-
-    getInstallationId: function() {
-        return LeanCloudPushNative.getInstallationId().then(function(installationId) {
-            console.log("installationId", installationId);
-        });
-    },
-
-    subscribe: function (fn) {
-        DeviceEventEmitter.addListener(LeanCloudPushNative.ON_RECEIVE_EVENT_NAME, function (res) {
-            console.log("ON_RECEIVE", res);
-        });
-    }
+export const getInstallationId = function () {
+    return LeanCloudPushNative.getInstallationId();
 };
 
+export const getInitialNotification = function () {
+    return LeanCloudPushNative.getInitialNotification();
+}
 
-export default module.exports = module;
+export const initialize = _.once(function () {
+    DeviceEventEmitter.addListener(LeanCloudPushNative.ON_RECEIVE, (res) => {
+        observable.onNext(res);
+    });
+    DeviceEventEmitter.addListener(LeanCloudPushNative.ON_ERROR, (res) => {
+        observable.onError(res);
+    });
+});

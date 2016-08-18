@@ -22,9 +22,12 @@ import java.util.Map;
  */
 public class LeanCloudPush extends ReactContextBaseJavaModule {
 
+    public static String MODULE_NAME = "LeanCloudPush";
+
     private static LeanCloudPush singleton;
-    private static String ON_RECEIVE_EVENT_NAME = "io.liaoyuan.reactnative.leancloudpush.onReceive";
-    private static String ON_ERROR_EVENT_NAME = "io.liaoyuan.reactnative.leancloudpush.onError";
+    private static Map<String, String> backgroundNotificationCache = null;
+    private static String ON_RECEIVE = "leancloudPushOnReceive";
+    private static String ON_ERROR = "leancloudPushOnError";
 
     public LeanCloudPush(ReactApplicationContext reactContext) {
         super(reactContext);
@@ -36,24 +39,35 @@ public class LeanCloudPush extends ReactContextBaseJavaModule {
         if (singleton != null) {
             WritableMap error = Arguments.createMap();
             error.putString("message", e.getLocalizedMessage());
-            singleton.getReactApplicationContext().getJSModule(RCTDeviceEventEmitter.class).emit(ON_ERROR_EVENT_NAME, error);
+            RCTDeviceEventEmitter emitter = singleton.getReactApplicationContext().getJSModule(RCTDeviceEventEmitter.class);
+            emitter.emit(ON_ERROR, error);
         }
     }
 
-    protected static void onReceive(String action, String channel, String data) {
+    private static WritableMap getWritableMap(Map<String, String> map) {
+        WritableMap writableMap = Arguments.createMap();
+        writableMap.putString("action", map.get("action"));
+        writableMap.putString("channel", map.get("channel"));
+        writableMap.putString("data", map.get("data"));
+        return writableMap;
+    }
+
+    protected static void onReceive(Map<String, String> map) {
+        backgroundNotificationCache = map;
         if (singleton != null) {
-            WritableMap pushNotification = Arguments.createMap();
-            pushNotification.putString("action", action);
-            pushNotification.putString("channel", channel);
-            pushNotification.putString("data", data);
-            Log.d("LeanCloudPush", "Sending to DeviceEventEmitter");
-            singleton.getReactApplicationContext().getJSModule(RCTDeviceEventEmitter.class).emit(ON_RECEIVE_EVENT_NAME, pushNotification);
+            WritableMap pushNotification = getWritableMap(map);
+            RCTDeviceEventEmitter emitter = singleton.getReactApplicationContext().getJSModule(RCTDeviceEventEmitter.class);
+            emitter.emit(ON_RECEIVE, pushNotification);
         }
+    }
+
+    protected static boolean isActive() {
+        return singleton != null;
     }
 
     @Override
     public String getName() {
-        return "LeanCloudPush";
+        return MODULE_NAME;
     }
 
     @ReactMethod
@@ -64,6 +78,7 @@ public class LeanCloudPush extends ReactContextBaseJavaModule {
                 public void done(AVException e) {
                     if (e == null) {
                         String installationId = AVInstallation.getCurrentInstallation().getInstallationId();
+                        Log.i(MODULE_NAME, "installationId = " + installationId);
                         promise.resolve(installationId);
                     } else {
                         promise.reject(e);
@@ -71,15 +86,28 @@ public class LeanCloudPush extends ReactContextBaseJavaModule {
                 }
             });
         } catch (Exception e) {
+            Log.e(MODULE_NAME, "fail to get installationId");
             promise.reject(e);
+        }
+    }
+
+    @ReactMethod
+    public void getInitialNotification(final Promise promise) {
+        if (backgroundNotificationCache != null) {
+            Log.i(MODULE_NAME, "initial notification data = " + backgroundNotificationCache.get("data"));
+            promise.resolve(getWritableMap(backgroundNotificationCache));
+            backgroundNotificationCache = null;
+        } else {
+            Log.w(MODULE_NAME, "no initial notification");
+            promise.resolve(null);
         }
     }
 
     @Override
     public Map<String, Object> getConstants() {
         final Map<String, Object> constants = new HashMap<>();
-        constants.put("ON_RECEIVE", ON_RECEIVE_EVENT_NAME);
-        constants.put("ON_ERROR", ON_ERROR_EVENT_NAME);
+        constants.put("ON_RECEIVE", ON_RECEIVE);
+        constants.put("ON_ERROR", ON_ERROR);
         return constants;
     }
 }
